@@ -9,6 +9,10 @@ on:
         description: "Mensagem de teste (deixe vazio para rodar normal)"
         required: false
         default: ""
+      destinatario:
+        description: "Enviar o teste só para este e-mail (vazio = todos da lista)"
+        required: false
+        default: ""
 
 permissions:
   contents: write             # para salvar o state.json no repositório
@@ -38,6 +42,7 @@ jobs:
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           REMINDERS: "1440,60"   # minutos antes do jogo: 1 dia e 1 hora
           TEST_MESSAGE: ${{ github.event.inputs.teste }}
+          TEST_TO: ${{ github.event.inputs.destinatario }}
         run: python bot.py
 
       - name: Salvar estado
