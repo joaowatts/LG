@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "*/10 * * * *"   # a cada 10 min (o GitHub pode atrasar alguns minutos)
   workflow_dispatch:          # botão "Run workflow" para rodar na mão
+    inputs:
+      teste:
+        description: "Mensagem de teste (deixe vazio para rodar normal)"
+        required: false
+        default: ""
 
 permissions:
   contents: write             # para salvar o state.json no repositório
@@ -32,6 +37,7 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           REMINDERS: "1440,60"   # minutos antes do jogo: 1 dia e 1 hora
+          TEST_MESSAGE: ${{ github.event.inputs.teste }}
         run: python bot.py
 
       - name: Salvar estado
