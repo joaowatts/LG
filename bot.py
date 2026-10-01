@@ -72,6 +72,19 @@ def _event_id(href: str):
     return m.group(1) if m else None
 
 
+def _logo(flex) -> str | None:
+    """URL do logo do time (versão clara). Ignora SVG (Gmail não exibe) e o logo genérico."""
+    if flex is None:
+        return None
+    imgs = flex.select("img.team-logo")
+    img = next((i for i in imgs if "night-only" not in (i.get("class") or [])), None)
+    src = (img.get("src") or "") if img else ""
+    path = src.split("?")[0].lower()
+    if not src or "placeholder" in path or path.endswith(".svg"):
+        return None
+    return HLTV + src if src.startswith("/") else src
+
+
 def _parse_match_table(table) -> list[dict]:
     matches = []
     event_name = ""
@@ -92,6 +105,7 @@ def _parse_match_table(table) -> list[dict]:
         t1 = row.select_one(".team-1")
         t2 = row.select_one(".team-2")
         scores = [s.get_text(strip=True) for s in row.select(".score-cell .score")]
+        flexes = row.select("td.team-center-cell .team-flex")
         matches.append({
             "id": mid,
             "time": unix,
@@ -101,6 +115,8 @@ def _parse_match_table(table) -> list[dict]:
             "score2": scores[1] if len(scores) > 1 else "-",
             "event": event_name,
             "url": HLTV + link["href"],
+            "logo1": _logo(flexes[0]) if len(flexes) > 0 else None,
+            "logo2": _logo(flexes[1]) if len(flexes) > 1 else None,
         })
     return matches
 
@@ -155,6 +171,12 @@ def fmt_day(unix) -> str:
 
 def opponent(m: dict) -> str:
     return m["team2"] if m["team1"].lower() == TEAM_NAME.lower() else m["team1"]
+
+
+def logos(m: dict) -> tuple:
+    """(logo da Luminosity, logo do adversário)."""
+    l1, l2 = m.get("logo1"), m.get("logo2")
+    return (l1, l2) if m["team1"].lower() == TEAM_NAME.lower() else (l2, l1)
 
 
 class Msg(str):
@@ -290,13 +312,25 @@ def _to_html(subject: str, body: str, card: dict | None = None) -> str:
     if m:
         mid = (f'{e(card["score"][0])} : {e(card["score"][1])}' if card.get("score")
                else '<span style="font-size:16px;color:#9a92ab;font-weight:600">vs</span>')
+        def team(name, logo):
+            if logo:
+                img = (f'<img src="{e(logo)}" width="56" height="56" alt="" '
+                       f'style="display:block;margin:0 auto 8px;width:56px;height:56px;object-fit:contain;border:0">')
+            else:  # sem logo (SVG ou adversário indefinido): círculo com a inicial
+                letter = "?" if ("/" in name or "winner" in name.lower()) else (name[:1].upper() or "?")
+                img = ('<div style="width:56px;height:56px;line-height:56px;margin:0 auto 8px;border-radius:50%;'
+                       f'background:#e7e1f2;color:#5b4b7a;font-size:22px;font-weight:800;text-align:center">{e(letter)}</div>')
+            return (f'<td width="40%" align="center" valign="middle" style="padding:18px 8px;font-size:17px;'
+                    f'font-weight:700;color:#1f1235">{img}{e(name)}</td>')
+
+        our_logo, opp_logo = logos(m)
         board = (
             '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
             'style="margin:18px 0 6px;background:#f7f5fb;border-radius:12px">'
             '<tr>'
-            f'<td width="40%" align="center" style="padding:16px 8px;font-size:17px;font-weight:700;color:#1f1235">{e(TEAM_NAME)}</td>'
-            f'<td width="20%" align="center" style="padding:16px 4px;font-size:26px;font-weight:800;color:{accent};white-space:nowrap">{mid}</td>'
-            f'<td width="40%" align="center" style="padding:16px 8px;font-size:17px;font-weight:700;color:#1f1235">{e(opponent(m))}</td>'
+            + team(TEAM_NAME, our_logo) +
+            f'<td width="20%" align="center" valign="middle" style="padding:18px 4px;font-size:26px;font-weight:800;color:{accent};white-space:nowrap">{mid}</td>'
+            + team(opponent(m), opp_logo) +
             '</tr></table>')
 
     rows = ""
