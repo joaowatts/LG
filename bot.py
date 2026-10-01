@@ -157,15 +157,47 @@ def opponent(m: dict) -> str:
     return m["team2"] if m["team1"].lower() == TEAM_NAME.lower() else m["team1"]
 
 
+class Msg(str):
+    """Texto simples do aviso (usado no corpo em texto e nos testes) + dados para o e-mail bonito."""
+
+    def __new__(cls, text, **card):
+        obj = super().__new__(cls, text)
+        obj.card = card
+        return obj
+
+
+def _fmt_date(unix) -> str:
+    d = datetime.fromtimestamp(unix, TZ)
+    return f"{DIAS[d.weekday()]} {d:%d/%m}"
+
+
+def _fmt_hour(unix) -> str:
+    return datetime.fromtimestamp(unix, TZ).strftime("%H:%M") + " (Brasília)"
+
+
+def _when_rows(m):
+    if not m["time"]:
+        return [("Data", "a definir")]
+    return [("Data", _fmt_date(m["time"])), ("Horário", _fmt_hour(m["time"]))]
+
+
 def msg_new_match(m):
-    return (f"🆕 *Jogo marcado: {TEAM_NAME} x {opponent(m)}*\n"
+    text = (f"🆕 *Jogo marcado: {TEAM_NAME} x {opponent(m)}*\n"
             f"🏆 {m['event']}\n"
             f"🗓️ {fmt_dt(m['time'])} (Brasília)\n{m['url']}")
+    return Msg(text, kind="new", label="Jogo marcado", headline="Novo jogo na agenda",
+               match=m, rows=[("Campeonato", m["event"])] + _when_rows(m),
+               url=m["url"], button="Ver partida no HLTV")
 
 
 def msg_time_changed(m, old):
-    return (f"⏰ *Horário alterado: {TEAM_NAME} x {opponent(m)}*\n"
+    text = (f"⏰ *Horário alterado: {TEAM_NAME} x {opponent(m)}*\n"
             f"Antes: {fmt_dt(old)}\nAgora: *{fmt_dt(m['time'])}* (Brasília)\n{m['url']}")
+    return Msg(text, kind="time", label="Horário alterado", headline="O horário do jogo mudou",
+               match=m, rows=[("Campeonato", m["event"]),
+                              ("Antes", f"~~{fmt_dt(old)}~~"),
+                              ("Agora", f"{fmt_dt(m['time'])} (Brasília)")],
+               url=m["url"], button="Ver partida no HLTV")
 
 
 def _when(unix, now) -> str:
@@ -184,31 +216,54 @@ def msg_reminder(m, minutes_left, now=None):
     vs = f"{TEAM_NAME} x {opponent(m)}"
     if minutes_left >= 120:  # lembrete com antecedência (ex.: 1 dia antes)
         when = _when(m["time"], now)
-        head = f"📅 *{when[0].upper() + when[1:]}: {vs}*"
+        when = when[0].upper() + when[1:]
+        head = f"📅 *{when}: {vs}*"
+        kind, label, headline = "day", "Lembrete", f"{when}"
     else:
         head = f"🔔 *Em {minutes_left} min: {vs}*"
-    return (f"{head}\n"
+        kind, label, headline = "hour", "Começa já já", f"Começa em {minutes_left} min"
+    text = (f"{head}\n"
             f"🏆 {m['event']}\n"
             f"Começa {fmt_dt(m['time'])} (Brasília)\n{m['url']}")
+    return Msg(text, kind=kind, label=label, headline=headline, match=m,
+               rows=[("Campeonato", m["event"])] + _when_rows(m),
+               url=m["url"], button="Assistir / acompanhar no HLTV")
 
 
 def msg_result(m):
     ours_first = m["team1"].lower() == TEAM_NAME.lower()
     our, their = (m["score1"], m["score2"]) if ours_first else (m["score2"], m["score1"])
     try:
-        head = "✅ Vitória" if int(our) > int(their) else "❌ Derrota"
+        won = int(our) > int(their)
+        head = "✅ Vitória" if won else "❌ Derrota"
+        kind = "win" if won else "loss"
+        headline = f"Vitória da {TEAM_NAME}!" if won else f"Derrota da {TEAM_NAME}"
     except ValueError:
-        head = "🏁 Fim de jogo"
-    return (f"{head}: *{TEAM_NAME} {our} x {their} {opponent(m)}*\n"
+        head, kind, headline = "🏁 Fim de jogo", "end", "Fim de jogo"
+    text = (f"{head}: *{TEAM_NAME} {our} x {their} {opponent(m)}*\n"
             f"🏆 {m['event']}\n{m['url']}")
+    return Msg(text, kind=kind, label="Resultado", headline=headline, match=m,
+               score=(our, their), rows=[("Campeonato", m["event"])],
+               url=m["url"], button="Ver estatísticas no HLTV")
 
 
 def msg_new_event(e):
-    return (f"🏆 *Novo campeonato: {e['name']}*\n"
+    text = (f"🏆 *Novo campeonato: {e['name']}*\n"
             f"📅 {fmt_day(e['start'])} a {fmt_day(e['end'])}\n{e['url']}")
+    return Msg(text, kind="event", label="Novo campeonato", headline=e["name"],
+               rows=[("Período", f"{fmt_day(e['start'])} a {fmt_day(e['end'])}")],
+               url=e["url"], button="Ver campeonato no HLTV")
 
 
 # ----------------------------- E-mail ---------------------------------------
+ACCENTS = {  # cor de destaque, fundo do selo
+    "new": ("#7c3aed", "#efe7ff"), "day": ("#7c3aed", "#efe7ff"), "info": ("#7c3aed", "#efe7ff"),
+    "hour": ("#d97706", "#fff1dc"), "time": ("#2563eb", "#e3ecff"),
+    "win": ("#16a34a", "#dcf5e5"), "loss": ("#dc2626", "#fde4e4"), "end": ("#6b7280", "#eceef1"),
+    "event": ("#b7791f", "#fbf0d9"),
+}
+
+
 def _split_message(text: str) -> tuple[str, str]:
     """1ª linha vira o assunto; o resto, o corpo."""
     lines = text.strip().splitlines()
@@ -216,20 +271,77 @@ def _split_message(text: str) -> tuple[str, str]:
     return subject, "\n".join(lines[1:]).strip()
 
 
-def _to_html(subject: str, body: str) -> str:
-    from html import escape
+def _to_html(subject: str, body: str, card: dict | None = None) -> str:
+    from html import escape as e
 
-    parts = []
-    for line in body.splitlines():
-        line = escape(line)
-        line = re.sub(r"\*(.+?)\*", r"<b>\1</b>", line)
-        line = re.sub(r"(https?://\S+)", r'<a href="\1">Ver no HLTV</a>', line)
-        parts.append(line)
-    title = escape(subject)
-    return (f'<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5">'
-            f'<h2 style="margin:0 0 8px;color:#5b2a86">{title}</h2>'
-            + "<br>".join(parts) +
-            '<p style="color:#888;font-size:12px;margin-top:16px">Bot de avisos da Luminosity · dados do HLTV</p></div>')
+    card = dict(card or {})
+    if not card:  # mensagens simples (boas-vindas, teste)
+        urls = re.findall(r"https?://\S+", body)
+        paras = [re.sub(r"\*(.+?)\*", r"<b>\1</b>", e(p)) for p in body.split("\n") if p.strip()
+                 and not p.strip().startswith("http")]
+        card = {"kind": "info", "label": "Aviso", "headline": re.sub(r"^\W+\s*", "", subject),
+                "paras": paras, "url": urls[0] if urls else None, "button": "Abrir no HLTV"}
+    accent, soft = ACCENTS.get(card.get("kind"), ACCENTS["info"])
+    font = "-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif"
+
+    # Placar / confronto
+    board = ""
+    m = card.get("match")
+    if m:
+        mid = (f'{e(card["score"][0])} : {e(card["score"][1])}' if card.get("score")
+               else '<span style="font-size:16px;color:#9a92ab;font-weight:600">vs</span>')
+        board = (
+            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+            'style="margin:18px 0 6px;background:#f7f5fb;border-radius:12px">'
+            '<tr>'
+            f'<td width="40%" align="center" style="padding:16px 8px;font-size:17px;font-weight:700;color:#1f1235">{e(TEAM_NAME)}</td>'
+            f'<td width="20%" align="center" style="padding:16px 4px;font-size:26px;font-weight:800;color:{accent};white-space:nowrap">{mid}</td>'
+            f'<td width="40%" align="center" style="padding:16px 8px;font-size:17px;font-weight:700;color:#1f1235">{e(opponent(m))}</td>'
+            '</tr></table>')
+
+    rows = ""
+    for label, value in card.get("rows", []):
+        strike = value.startswith("~~") and value.endswith("~~")
+        value = e(value.strip("~"))
+        style = "text-decoration:line-through;color:#9a92ab;font-weight:500" if strike else "color:#1f1235;font-weight:600"
+        rows += (f'<tr><td style="padding:10px 0;border-bottom:1px solid #eeeaf4;color:#8a8399;font-size:13px;width:110px">{e(label)}</td>'
+                 f'<td style="padding:10px 0;border-bottom:1px solid #eeeaf4;font-size:15px;{style}">{value}</td></tr>')
+    if rows:
+        rows = f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px">{rows}</table>'
+
+    paras = "".join(f'<p style="margin:12px 0 0;font-size:15px;line-height:1.55;color:#3b3350">{p}</p>'
+                    for p in card.get("paras", []))
+
+    button = ""
+    if card.get("url"):
+        button = (f'<tr><td align="center" style="padding:24px 28px 30px">'
+                  f'<a href="{e(card["url"])}" style="display:inline-block;background:{accent};color:#ffffff;'
+                  f'text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px">'
+                  f'{e(card.get("button", "Ver no HLTV"))} &rarr;</a>'
+                  f'<div style="margin-top:10px;font-size:12px;color:#9a92ab">'
+                  f'<a href="{e(card["url"])}" style="color:#9a92ab">{e(card["url"].replace("https://www.", ""))[:70]}</a></div>'
+                  f'</td></tr>')
+    else:
+        button = '<tr><td style="padding:0 28px 26px"></td></tr>'
+
+    return f"""<!doctype html><html><body style="margin:0;padding:0;background:#f1edf8">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1edf8"><tr><td align="center" style="padding:28px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;font-family:{font};box-shadow:0 2px 10px rgba(40,10,80,.08)">
+<tr><td style="background:#22093f;padding:18px 28px">
+  <span style="color:#ffffff;font-size:15px;font-weight:800;letter-spacing:2px">LUMINOSITY</span>
+  <span style="color:#b9a6e6;font-size:13px;font-weight:600;letter-spacing:1px">&nbsp;·&nbsp;CS2</span>
+</td></tr>
+<tr><td style="height:4px;line-height:4px;font-size:0;background:{accent}">&nbsp;</td></tr>
+<tr><td style="padding:26px 28px 0">
+  <span style="display:inline-block;background:{soft};color:{accent};font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;padding:5px 11px;border-radius:999px">{e(card.get("label", ""))}</span>
+  <div style="margin-top:14px;font-size:24px;line-height:1.25;font-weight:800;color:#1f1235">{e(card.get("headline", subject))}</div>
+  {board}{rows}{paras}
+</td></tr>
+{button}
+<tr><td style="background:#faf8fd;border-top:1px solid #eeeaf4;padding:14px 28px;font-size:12px;line-height:1.5;color:#8a8399">
+  Bot de avisos da Luminosity &middot; dados do HLTV &middot; horários de Brasília
+</td></tr>
+</table></td></tr></table></body></html>"""
 
 
 def send_email(text: str) -> None:
@@ -245,11 +357,11 @@ def send_email(text: str) -> None:
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = f"Bot Luminosity <{GMAIL_USER}>"
-    msg["To"] = GMAIL_USER          # você recebe como destinatário principal
-    if EMAIL_TO:                      # amigos em cópia oculta (opcional)
+    msg["To"] = GMAIL_USER          # dono da conta que envia recebe como destinatário principal
+    if EMAIL_TO:                      # demais pessoas em cópia oculta
         msg["Bcc"] = ", ".join(EMAIL_TO)
-    msg.set_content(body)
-    msg.add_alternative(_to_html(subject, body), subtype="html")
+    msg.set_content(body.replace("*", ""))
+    msg.add_alternative(_to_html(subject, body, getattr(text, "card", None)), subtype="html")
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as smtp:
         smtp.login(GMAIL_USER, GMAIL_APP_PASSWORD)
         smtp.send_message(msg)
