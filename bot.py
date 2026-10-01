@@ -344,6 +344,11 @@ def compute_notifications(data: dict, state: dict, now: int) -> tuple[list[str],
 
 
 def main() -> int:
+    test_msg = os.getenv("TEST_MESSAGE", "").strip()
+    if test_msg:  # botão "Run workflow" com mensagem de teste
+        send_email("🧪 *Teste do Bot Luminosity*\n" + test_msg)
+        return 0
+
     state = load_state()
     try:
         html = fetch_team_page()
