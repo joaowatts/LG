@@ -1,0 +1,125 @@
+{
+  "events": {
+    "9256": {
+      "name": "Stake Ranked Episode 4"
+    },
+    "9312": {
+      "name": "Digital Crusade DraculaN Season 7"
+    },
+    "9427": {
+      "name": "HyperX Retake Season 13"
+    }
+  },
+  "initialized": true,
+  "matches": {
+    "2397887": {
+      "result_sent": true,
+      "sent": [
+        1440,
+        60
+      ],
+      "time": 1789637700
+    },
+    "2397888": {
+      "result_sent": true,
+      "sent": [
+        1440,
+        60
+      ],
+      "time": 1789641300
+    },
+    "2397892": {
+      "result_sent": true,
+      "sent": [
+        1440,
+        60
+      ],
+      "time": 1789653600
+    },
+    "2397897": {
+      "result_sent": true,
+      "sent": [
+        1440,
+        60
+      ],
+      "time": 1789662600
+    },
+    "2397898": {
+      "result_sent": true,
+      "sent": [
+        1440,
+        60
+      ],
+      "time": 1789667100
+    },
+    "2397915": {
+      "result_sent": true,
+      "sent": [
+        1440,
+        60
+      ],
+      "time": 1789815600
+    },
+    "2397917": {
+      "result_sent": true,
+      "sent": [
+        1440,
+        60
+      ],
+      "time": 1790085600
+    },
+    "2397919": {
+      "result_sent": true,
+      "sent": [
+        1440,
+        60
+      ],
+      "time": 1790181900
+    },
+    "2397937": {
+      "result_sent": true,
+      "sent": [
+        1440,
+        60
+      ],
+      "time": 1789147200
+    },
+    "2397938": {
+      "result_sent": true,
+      "sent": [
+        1440,
+        60
+      ],
+      "time": 1790848800
+    },
+    "2397945": {
+      "result_sent": true,
+      "sent": [
+        1440,
+        60
+      ],
+      "time": 1789221900
+    },
+    "2397948": {
+      "result_sent": true,
+      "sent": [
+        1440,
+        60
+      ],
+      "time": 1789293600
+    },
+    "2397951": {
+      "result_sent": true,
+      "sent": [
+        1440,
+        60
+      ],
+      "time": 1789318800
+    },
+    "2398002": {
+      "result_sent": false,
+      "sent": [],
+      "time": 1790953200
+    }
+  }
+}
