@@ -277,6 +277,25 @@ def msg_new_event(e):
                url=e["url"], button="Ver campeonato no HLTV")
 
 
+def build_test_message(note: str):
+    """E-mail de teste já no visual dos avisos, usando o próximo jogo do HLTV."""
+    try:
+        data = parse_team_page(fetch_team_page())
+    except Exception as exc:  # noqa: BLE001
+        print(f"AVISO: teste sem dados do HLTV ({exc})")
+        data = {"upcoming": []}
+    nxt = sorted([m for m in data["upcoming"] if m["time"]], key=lambda m: m["time"])
+    if not nxt:
+        return "🧪 *Teste do Bot Luminosity*\n" + note
+    m = nxt[0]
+    base = msg_new_match(m)
+    text = (f"🧪 *Teste: {TEAM_NAME} x {opponent(m)}*\n{note}\n"
+            + "\n".join(str(base).splitlines()[1:]))
+    card = dict(base.card, label="E-mail de teste", intro=note,
+                headline=f"Próximo jogo: {TEAM_NAME} x {opponent(m)}")
+    return Msg(text, **card)
+
+
 # ----------------------------- E-mail ---------------------------------------
 ACCENTS = {  # cor de destaque, fundo do selo
     "new": ("#7c3aed", "#efe7ff"), "day": ("#7c3aed", "#efe7ff"), "info": ("#7c3aed", "#efe7ff"),
@@ -304,6 +323,8 @@ def _to_html(subject: str, body: str, card: dict | None = None) -> str:
         card = {"kind": "info", "label": "Aviso", "headline": re.sub(r"^\W+\s*", "", subject),
                 "paras": paras, "url": urls[0] if urls else None, "button": "Abrir no HLTV"}
     accent, soft = ACCENTS.get(card.get("kind"), ACCENTS["info"])
+    intro = (f'<p style="margin:10px 0 0;font-size:15px;line-height:1.55;color:#3b3350">{e(card["intro"])}</p>'
+             if card.get("intro") else "")
     font = "-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif"
 
     # Placar / confronto
@@ -369,7 +390,7 @@ def _to_html(subject: str, body: str, card: dict | None = None) -> str:
 <tr><td style="padding:26px 28px 0">
   <span style="display:inline-block;background:{soft};color:{accent};font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;padding:5px 11px;border-radius:999px">{e(card.get("label", ""))}</span>
   <div style="margin-top:14px;font-size:24px;line-height:1.25;font-weight:800;color:#1f1235">{e(card.get("headline", subject))}</div>
-  {board}{rows}{paras}
+  {intro}{board}{rows}{paras}
 </td></tr>
 {button}
 <tr><td style="background:#faf8fd;border-top:1px solid #eeeaf4;padding:14px 28px;font-size:12px;line-height:1.5;color:#8a8399">
@@ -378,7 +399,7 @@ def _to_html(subject: str, body: str, card: dict | None = None) -> str:
 </table></td></tr></table></body></html>"""
 
 
-def send_email(text: str) -> None:
+def send_email(text: str, only_to: str | None = None) -> None:
     subject, body = _split_message(text)
     if DRY_RUN:
         print(f"---- [DRY_RUN] {subject} ----\n{body}\n")
@@ -391,9 +412,12 @@ def send_email(text: str) -> None:
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = f"Bot Luminosity <{GMAIL_USER}>"
-    msg["To"] = GMAIL_USER          # dono da conta que envia recebe como destinatário principal
-    if EMAIL_TO:                      # demais pessoas em cópia oculta
-        msg["Bcc"] = ", ".join(EMAIL_TO)
+    if only_to:                       # teste para um destinatário específico
+        msg["To"] = only_to
+    else:
+        msg["To"] = GMAIL_USER          # dono da conta que envia recebe como destinatário principal
+        if EMAIL_TO:                      # demais pessoas em cópia oculta
+            msg["Bcc"] = ", ".join(EMAIL_TO)
     msg.set_content(body.replace("*", ""))
     msg.add_alternative(_to_html(subject, body, getattr(text, "card", None)), subtype="html")
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as smtp:
@@ -492,7 +516,7 @@ def compute_notifications(data: dict, state: dict, now: int) -> tuple[list[str],
 def main() -> int:
     test_msg = os.getenv("TEST_MESSAGE", "").strip()
     if test_msg:  # botão "Run workflow" com mensagem de teste
-        send_email("🧪 *Teste do Bot Luminosity*\n" + test_msg)
+        send_email(build_test_message(test_msg), os.getenv("TEST_TO", "").strip() or None)
         return 0
 
     state = load_state()
