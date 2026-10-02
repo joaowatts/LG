@@ -513,7 +513,35 @@ def compute_notifications(data: dict, state: dict, now: int) -> tuple[list[str],
     return out, new_state
 
 
+def build_replay(kind: str, now: int) -> list:
+    """Recria avisos já enviados (último resultado e/ou próximo jogo) para mandar a alguém novo."""
+    data = parse_team_page(fetch_team_page())
+    out = []
+    if kind in ("ultimo_resultado", "ambos"):
+        done = [m for m in data["results"] if m["score1"].isdigit() and m["score2"].isdigit()]
+        if done:
+            out.append(msg_result(done[0]))  # HLTV lista o mais recente primeiro
+    if kind in ("proximo_jogo", "ambos"):
+        nxt = sorted([m for m in data["upcoming"] if m["time"] and m["time"] > now], key=lambda m: m["time"])
+        if nxt:
+            m = nxt[0]
+            out.append(msg_reminder(m, max(1, round((m["time"] - now) / 60)), now))
+    return out
+
+
 def main() -> int:
+    replay = os.getenv("REPLAY", "").strip()
+    if replay and replay != "nenhum":  # botão "Run workflow" → reenviar avisos para uma pessoa
+        to = os.getenv("TEST_TO", "").strip()
+        if not to:
+            print("ERRO: para reenviar avisos, preencha o campo do destinatário.")
+            return 1
+        msgs = build_replay(replay, int(time.time()))
+        for text in msgs:
+            send_email(text, to)
+        print(f"{len(msgs)} aviso(s) reenviado(s) para {to}.")
+        return 0
+
     test_msg = os.getenv("TEST_MESSAGE", "").strip()
     if test_msg:  # botão "Run workflow" com mensagem de teste
         send_email(build_test_message(test_msg), os.getenv("TEST_TO", "").strip() or None)
