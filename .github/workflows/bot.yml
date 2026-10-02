@@ -13,6 +13,12 @@ on:
         description: "Enviar o teste só para este e-mail (vazio = todos da lista)"
         required: false
         default: ""
+      reenviar:
+        description: "Reenviar aviso já enviado para o e-mail acima"
+        required: false
+        type: choice
+        options: [nenhum, ultimo_resultado, proximo_jogo, ambos]
+        default: nenhum
 
 permissions:
   contents: write             # para salvar o state.json no repositório
@@ -43,6 +49,7 @@ jobs:
           REMINDERS: "1440,60"   # minutos antes do jogo: 1 dia e 1 hora
           TEST_MESSAGE: ${{ github.event.inputs.teste }}
           TEST_TO: ${{ github.event.inputs.destinatario }}
+          REPLAY: ${{ github.event.inputs.reenviar }}
         run: python bot.py
 
       - name: Salvar estado
