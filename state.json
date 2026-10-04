@@ -133,7 +133,7 @@
       "time": 1791039600
     },
     "2398008": {
-      "result_sent": false,
+      "result_sent": true,
       "sent": [
         1440,
         60
