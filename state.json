@@ -3,6 +3,9 @@
     "9256": {
       "name": "Stake Ranked Episode 4"
     },
+    "9258": {
+      "name": "Stake Ranked Episode 6"
+    },
     "9312": {
       "name": "Digital Crusade DraculaN Season 7"
     },
@@ -87,30 +90,6 @@
       ],
       "time": 1790848800
     },
-    "2397945": {
-      "result_sent": true,
-      "sent": [
-        1440,
-        60
-      ],
-      "time": 1789221900
-    },
-    "2397948": {
-      "result_sent": true,
-      "sent": [
-        1440,
-        60
-      ],
-      "time": 1789293600
-    },
-    "2397951": {
-      "result_sent": true,
-      "sent": [
-        1440,
-        60
-      ],
-      "time": 1789318800
-    },
     "2398002": {
       "result_sent": true,
       "sent": [
@@ -134,6 +113,11 @@
         60
       ],
       "time": 1791115200
+    },
+    "2399617": {
+      "result_sent": false,
+      "sent": [],
+      "time": 1792504800
     }
   }
 }
