@@ -67,12 +67,20 @@
       "time": 1791115200
     },
     "2399617": {
-      "result_sent": false,
+      "result_sent": true,
       "sent": [
         1440,
         60
       ],
       "time": 1792506300
+    },
+    "2399621": {
+      "result_sent": false,
+      "sent": [
+        1440,
+        60
+      ],
+      "time": 1792519200
     }
   }
 }
