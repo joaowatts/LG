@@ -33,6 +33,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: main                 # sempre a versão mais nova do state.json
 
       - uses: actions/setup-python@v6
         with:
@@ -58,4 +60,7 @@ jobs:
           git config user.name "luminosity-bot"
           git config user.email "luminosity-bot@users.noreply.github.com"
           git add state.json
-          git diff --cached --quiet || (git commit -m "Atualiza estado do bot" && git push)
+          git diff --cached --quiet && exit 0
+          git commit -m "Atualiza estado do bot"
+          for i in 1 2 3; do git pull --rebase -X theirs origin main && git push && exit 0; sleep 5; done
+          exit 1
