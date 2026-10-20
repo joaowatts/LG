@@ -10,6 +10,7 @@ Avisos:
 Roda a cada X minutos (GitHub Actions) e guarda o que já avisou em state.json.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -131,7 +132,9 @@ def parse_team_page(html: str) -> dict:
     for h2 in box.find_all("h2"):
         title = h2.get_text(strip=True).lower()
         table = h2.find_next("table")
-        if table is None:
+        # A tabela precisa ser desta seção: se não houver jogos futuros, o HLTV mostra
+        # só um texto e a próxima tabela já é a de resultados (bug de e-mails repetidos).
+        if table is None or table.find_previous("h2") is not h2:
             continue
         if title.startswith("upcoming matches"):
             upcoming = _parse_match_table(table)
@@ -399,7 +402,7 @@ def _to_html(subject: str, body: str, card: dict | None = None) -> str:
 </table></td></tr></table></body></html>"""
 
 
-def send_email(text: str, only_to: str | None = None) -> None:
+def send_email(text: str, only_to: str | None = None, msg_id: str | None = None) -> None:
     subject, body = _split_message(text)
     if DRY_RUN:
         print(f"---- [DRY_RUN] {subject} ----\n{body}\n")
@@ -416,8 +419,14 @@ def send_email(text: str, only_to: str | None = None) -> None:
         msg["To"] = only_to
     else:
         msg["To"] = GMAIL_USER          # dono da conta que envia recebe como destinatário principal
-        if EMAIL_TO:                      # demais pessoas em cópia oculta
-            msg["Bcc"] = ", ".join(EMAIL_TO)
+        bcc = []
+        for addr in EMAIL_TO:             # demais pessoas em cópia oculta, sem repetir ninguém
+            if addr.lower() != GMAIL_USER.lower() and addr.lower() not in [b.lower() for b in bcc]:
+                bcc.append(addr)
+        if bcc:
+            msg["Bcc"] = ", ".join(bcc)
+    if msg_id:  # mesmo ID = o Gmail descarta cópias repetidas
+        msg["Message-ID"] = f"<{msg_id}@luminosity-bot>"
     msg.set_content(body.replace("*", ""))
     msg.add_alternative(_to_html(subject, body, getattr(text, "card", None)), subtype="html")
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as smtp:
@@ -462,8 +471,8 @@ def compute_notifications(data: dict, state: dict, now: int) -> tuple[list[str],
             matches[m["id"]] = rec
             if m["time"]:
                 mark_passed(rec, m["time"] - now)
-            if not first_run:
-                out.append(msg_new_match(m))
+            if not first_run and (not m["time"] or m["time"] > now - 3 * 3600):
+                out.append(msg_new_match(m))  # nunca anuncia como "marcado" um jogo antigo
             continue
         if m["time"] and rec.get("time") and m["time"] != rec["time"]:
             out.append(msg_time_changed(m, rec["time"]))
@@ -507,7 +516,9 @@ def compute_notifications(data: dict, state: dict, now: int) -> tuple[list[str],
 
     # Limpeza: esquece partidas com mais de 30 dias
     cutoff = now - 30 * 24 * 3600
-    matches = {k: v for k, v in matches.items() if not v.get("time") or v["time"] > cutoff}
+    visible = {m["id"] for m in data["upcoming"] + data["results"]}
+    matches = {k: v for k, v in matches.items()
+               if not v.get("time") or v["time"] > cutoff or k in visible}
 
     new_state = {"initialized": True, "matches": matches, "events": events}
     return out, new_state
@@ -560,7 +571,8 @@ def main() -> int:
           f"{len(data['events'])} eventos.")
 
     first_run = not state.get("initialized")
-    msgs, new_state = compute_notifications(data, state, int(time.time()))
+    now = int(time.time())
+    msgs, new_state = compute_notifications(data, state, now)
 
     if first_run:
         print("Primeira execução: estado salvo sem enviar avisos (evita spam).")
@@ -571,11 +583,21 @@ def main() -> int:
                 txt += f"\n\nPróximo jogo: {TEAM_NAME} x {opponent(nxt[0])} — {fmt_dt(nxt[0]['time'])} (Brasília)"
             send_email(txt)
 
+    log = {k: v for k, v in state.get("sent_log", {}).items() if now - v < 7 * 86400}
+    sent = 0
     for text in msgs:
-        send_email(text)
-
+        key = hashlib.sha1(str(text).encode()).hexdigest()[:16]
+        if key in log:  # trava extra: o mesmo e-mail nunca sai duas vezes
+            print(f"Ignorado (já enviado): {_split_message(text)[0]}")
+            continue
+        send_email(text, msg_id=key)
+        log[key] = now
+        sent += 1
+        new_state["sent_log"] = log
+        save_state(new_state)  # salva a cada envio: se cair no meio, não repete
+    new_state["sent_log"] = log
     save_state(new_state)
-    print(f"{len(msgs)} aviso(s) enviado(s).")
+    print(f"{sent} aviso(s) enviado(s).")
     return 0
 
 
